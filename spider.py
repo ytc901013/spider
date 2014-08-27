@@ -32,15 +32,16 @@ class Dispatcher(threading.Thread):
             try:
                 if self.task.dispatch_lock and len(threading.enumerate()) < config.max_thread_num and\
                 len(self.task.to_crawl) > 0:
-                    config.sleep_time = config.init_sleep_time
+                    config.dispatch_sleep_time = float(config.dispatch_sleep_time/config.speed_ratio)
                     url = self.task.to_crawl.pop()
                     new_thread = threading.Thread(target=self.start_crawl, args=(url,))
                     new_thread.start()
+                else:
+                    config.dispatch_sleep_time = config.init_sleep_time
             except:
                 traceback.print_exc()
-                #config.sleep_time = 120
             finally:
-                time.sleep(config.sleep_time)
+                time.sleep(config.dispatch_sleep_time)
 
     def start_crawl(self, url):
         buffer = StringIO.StringIO()
@@ -79,16 +80,17 @@ class Collector(threading.Thread):
                 elif self.task.collect_lock and \
                    len(threading.enumerate()) < config.max_thread_num and\
                    len(self.task.to_filt) > 0:
-                    config.sleep_time = config.init_sleep_time
+                    config.collect_sleep_time = float(config.collect_sleep_time/config.speed_ratio)
                     url = self.task.to_filt.pop()
                     
                     new_thread = threading.Thread(target=self.start_filt, args=(url,))
                     new_thread.start()
+                else:
+                    config.collect_sleep_time = config.init_sleep_time
             except:
                 traceback.print_exc()
-                #config.sleep_time = 120
             finally:
-                time.sleep(config.sleep_time)
+                time.sleep(config.collect_sleep_time)
 
     def store_picture(self, url, file_ext):
         self.mylock.acquire()
@@ -148,7 +150,9 @@ class Config(object):
     def __init__(self):
         self.charset = 'utf-8'
         self.init_sleep_time = 0.001
-        self.sleep_time = self.init_sleep_time
+        self.speed_ratio = 1
+        self.collect_sleep_time = self.init_sleep_time
+        self.dispatch_sleep_time = self.init_sleep_time
         self.crawl_external = False
         self.origin_url = None
         self.max_thread_num = 10
@@ -162,6 +166,8 @@ class Config(object):
         self.store_path = config.picture_path
         self.charset = config.charset
         self.crawl_external = config.crawl_external
+        self.speed_ratio = config.speed_ratio
+        self.init_sleep_time = config.init_sleep_time
         
 class Task(object):
     def __init__(self):
@@ -179,7 +185,7 @@ class Task(object):
         else:
             self.tick = 0
         if self.tick > 60:
-            print "task is finished"
+            print "task is finished totally crawl %s urls\n" % self.current_picture_num
             return True
         return False
 
@@ -209,8 +215,13 @@ def parse_argument(parser):
                         default='utf-8', help='charset')
     parser.add_argument('-e', action='store_true', dest='crawl_external', default=False, \
                         help='crawl external link or not')
+    parser.add_argument('-r', action='store', dest='speed_ratio', default=1, \
+                        type=float, help='the speed up ratio')
+    parser.add_argument('-t', action='store', dest='init_sleep_time', default=0.001, \
+                        type=float, help='thread sleep time')
 
 if __name__ == "__main__":
+    start_time = time.time()
     parser = argparse.ArgumentParser()
     parse_argument(parser)
     results = parser.parse_args()
@@ -218,6 +229,9 @@ if __name__ == "__main__":
     config = Config()
     if not results.origin_url:
         print "you must input the origin url!"
+        exit(0)
+    if results.speed_ratio == 0 or results.init_sleep_time == 0:
+        print "speed up ratio or thread sleep time can not be zero!"
         exit(0)
     config.init(results)
     task.to_crawl.append(results.origin_url)
@@ -231,5 +245,6 @@ if __name__ == "__main__":
     while True: 
         task.auto_regulate()
         if task.is_finished():
+            print "used time %s" % (time.time()-start_time)
             break
         time.sleep(1)
