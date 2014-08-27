@@ -112,6 +112,19 @@ class Collector(threading.Thread):
         else:
             self.task.duplicate_set.add(key)
             return False
+
+    def is_allow_domain(self, netloc_normal, sub_domain):
+        if netloc_normal.endswith(sub_domain) or config.crawl_external or \
+           self.allow_domain(netloc_normal):
+            return True
+        else:
+            return False
+
+    def allow_domain(self, netloc_normal):
+        for domain in config.white_domain:
+            if netloc_normal.endswith(domain):
+                return True
+        return False
     
     def start_filt(self, url):
         if url:
@@ -130,12 +143,11 @@ class Collector(threading.Thread):
             else:
                 sub_domain = netloc_origin
 
-            if netloc_normal.endswith(sub_domain) or netloc_normal.endswith(".meimei22.com") or \
-               config.crawl_external:
+            if self.is_allow_domain(netloc_normal, sub_domain):
                 if not self.is_duplicate(url):
                     path = parsed_normal_url[2]
                     file_ext = path.split('.')[-1]
-                    if file_ext in ['gif', 'jpg', 'png']:
+                    if file_ext in config.white_ext:
                         self.store_picture(url, file_ext)
                     else:
                         self.task.to_crawl.append(url)
@@ -158,16 +170,22 @@ class Config(object):
         self.max_thread_num = 10
         self.max_picture_num = -1
         self.store_path = os.path.join(os.path.realpath('.'), 'pic')
+        self.white_ext = ['jpg', 'png', 'gif']
+        self.white_domain = ['meimei22.com']
 
     def init(self, config):
         self.origin_url = config.origin_url
         self.max_thread_num = config.max_thread_num
         self.max_picture_num = config.max_picture_num
         self.store_path = config.picture_path
+        if not os.path.exists(self.store_path):
+            os.makedirs(self.store_path)
         self.charset = config.charset
         self.crawl_external = config.crawl_external
         self.speed_ratio = config.speed_ratio
         self.init_sleep_time = config.init_sleep_time
+        self.white_ext = config.white_ext
+        self.white_domain = config.white_domain
         
 class Task(object):
     def __init__(self):
@@ -203,7 +221,7 @@ class Task(object):
 
 def parse_argument(parser):
     parser.add_argument('-u', action='store', dest='origin_url', \
-                        help='the url to crawl')
+                        required=True, help='the url to crawl')
     parser.add_argument('-n', action='store', dest='max_thread_num', \
                         default=10, type=int, help='max thread number')
     parser.add_argument('-o', action='store', dest='picture_path', \
@@ -219,6 +237,10 @@ def parse_argument(parser):
                         type=float, help='the speed up ratio')
     parser.add_argument('-t', action='store', dest='init_sleep_time', default=0.001, \
                         type=float, help='thread sleep time')
+    parser.add_argument('-ae', action='append', dest='white_ext', default=['jpg', 'png', 'gif'], \
+                        type=str, help='picture type you want to crawl, example:-ae "jpg" -ap "png"')
+    parser.add_argument('-ad', action='append', dest='white_domain', default=['meimei22.com'], \
+                        type=str, help='domain you want to crawl, example:-ad "test.com" -ad "test1.com"')
 
 if __name__ == "__main__":
     start_time = time.time()
@@ -227,9 +249,6 @@ if __name__ == "__main__":
     results = parser.parse_args()
     task = Task()
     config = Config()
-    if not results.origin_url:
-        print "you must input the origin url!"
-        exit(0)
     if results.speed_ratio == 0 or results.init_sleep_time == 0:
         print "speed up ratio or thread sleep time can not be zero!"
         exit(0)
