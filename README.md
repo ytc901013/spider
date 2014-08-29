@@ -48,9 +48,9 @@ python spider.py -u "http://girl-atlas.com/" -o "g:\meitu" -n 500 -r 2 -ae "jpg!
 
 六、功能包装
 
-1、设计Dispatch线程类，用于包装访问页面，解析结果功能
+1、设计Dispatcher线程类，用于包装访问页面，解析结果功能
 
-2、设计Collect线程类，用于包装页面消重，图片存储功能
+2、设计Collector线程类，用于包装页面消重，图片存储功能
 
 3、设计Task类，用于存放任务相关信息
 
