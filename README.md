@@ -3,6 +3,14 @@ spider
 
 a spider for picture
 
+python spider.py -h查看帮助
+
+试例一：
+python spider.py -u "http://www.22mm.cc/" -o "g:\mm" -n 20 -ad "meimei22.com" -c "utf-8" -l 100
+
+试例二：
+python spider.py -u "http://girl-atlas.com/" -o "g:\meitu" -n 500 -r 2 -ae "jpg!mid" -ae "jpg!pre" -ae "jog!prev" -ad "upaiyun.com" -t 0.001
+
 一、设计思路
 
 1、访问页面
