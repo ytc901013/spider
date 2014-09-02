@@ -13,6 +13,7 @@ from copy import deepcopy
 import sys, os
 import pdb
 import argparse
+from pool import WorkManager
 
 def request(url, buffer):
     c = pycurl.Curl()
@@ -20,6 +21,7 @@ def request(url, buffer):
     c.setopt(c.CONNECTTIMEOUT, 60)
     c.setopt(c.TIMEOUT, 600)
     c.setopt(c.WRITEFUNCTION, buffer.write)
+    #c.setopt(c.PROXY, "http://127.0.0.1:8580")
     c.perform()
 
 class Dispatcher(threading.Thread):
@@ -30,12 +32,10 @@ class Dispatcher(threading.Thread):
     def run(self):
         while True:
             try:
-                if self.task.dispatch_lock and len(threading.enumerate()) < config.max_thread_num and\
-                len(self.task.to_crawl) > 0:
+                if len(self.task.to_crawl) > 0:
                     config.dispatch_sleep_time = float(config.dispatch_sleep_time/config.speed_ratio)
                     url = self.task.to_crawl.pop()
-                    new_thread = threading.Thread(target=self.start_crawl, args=(url,))
-                    new_thread.start()
+                    tpool.add_job(self.start_crawl, url)
                 else:
                     config.dispatch_sleep_time = config.init_sleep_time
             except:
@@ -44,6 +44,7 @@ class Dispatcher(threading.Thread):
                 time.sleep(config.dispatch_sleep_time)
 
     def start_crawl(self, url):
+        url = url[0]
         buffer = StringIO.StringIO()
         request(url, buffer)
         html = buffer.getvalue()
@@ -57,6 +58,7 @@ class Dispatcher(threading.Thread):
                 tree = etree.parse(StringIO.StringIO(html.lower().decode(config.charset, 'ignore')), parser)
             except:
                 tree = etree.parse(StringIO.StringIO(html.lower()), parser)
+            
             for a in tree.xpath("//img"):
                 result.add(a.get('src'))
             for a in tree.xpath("//a"):
@@ -77,14 +79,10 @@ class Collector(threading.Thread):
                    config.max_picture_num != -1:
                     self.task.to_crawl = []
                     self.task.to_filt = []
-                elif self.task.collect_lock and \
-                   len(threading.enumerate()) < config.max_thread_num and\
-                   len(self.task.to_filt) > 0:
+                elif len(self.task.to_filt) > 0:
                     config.collect_sleep_time = float(config.collect_sleep_time/config.speed_ratio)
                     url = self.task.to_filt.pop()
-                    
-                    new_thread = threading.Thread(target=self.start_filt, args=(url,))
-                    new_thread.start()
+                    tpool.add_job(self.start_filt, url)
                 else:
                     config.collect_sleep_time = config.init_sleep_time
             except:
@@ -127,6 +125,7 @@ class Collector(threading.Thread):
         return False
     
     def start_filt(self, url):
+        url = url[0]
         if url:
             parsed_normal_url = urlparse.urlparse(url)
             parsed_origin_url = urlparse.urlparse(config.origin_url)
@@ -152,7 +151,7 @@ class Collector(threading.Thread):
                     else:
                         self.task.to_crawl.append(url)
                 else:
-                    #print "duplicate"
+                    #print "%s duplicate" % url
                     pass
             else:
                 #print "external"
@@ -193,8 +192,6 @@ class Task(object):
         self.to_filt = []
         self.duplicate_set = set()
         self.current_picture_num = 0
-        self.dispatch_lock = True
-        self.collect_lock = True
         self.tick = 0
 
     def is_finished(self):
@@ -202,7 +199,7 @@ class Task(object):
             self.tick += 1
         else:
             self.tick = 0
-        if self.tick > 60:
+        if self.tick > 120:
             print "task is finished totally crawl %s urls\n" % self.current_picture_num
             return True
         return False
@@ -211,13 +208,6 @@ class Task(object):
         print "current thread num %s,to_crawl %s, to_filt %s\n" % (len(threading.enumerate()), \
                                                                    len(self.to_crawl), \
                                                                    len(self.to_filt))
-        if len(self.to_crawl) > len(self.to_filt):
-            self.dispatch_lock = True
-            self.collect_lock = False
-        else:
-            self.dispatch_lock = False
-            self.collect_lock = True
-            
 
 def parse_argument(parser):
     parser.add_argument('-u', action='store', dest='origin_url', \
@@ -254,6 +244,7 @@ if __name__ == "__main__":
         exit(0)
     config.init(results)
     task.to_crawl.append(results.origin_url)
+    tpool = WorkManager(config.max_thread_num)
     dispatcher = Dispatcher(task)
     dispatcher.setDaemon(True)
     dispatcher.start()  
