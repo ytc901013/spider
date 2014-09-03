@@ -77,3 +77,5 @@ python spider.py -u "http://girl-atlas.com/" -o "g:\meitu" -n 500 -r 2 -ae "jpg!
 九、测试，性能调优
 
 1、增加自动加速策略
+
+2、增加线程池功能
